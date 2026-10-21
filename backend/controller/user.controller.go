@@ -110,7 +110,7 @@ func (uc *UserController) VerifyToken(c *gin.Context) {
 	}
 
 	// Verify JWT Token
-	err, claims := helper.VerifyToken(userInput.Token)
+	claims, err := helper.VerifyToken(userInput.Token)
 	if err != nil {
 		uc.logger.Error(err.Error())
 		helper.ErrorResponse(c, 401, nil, err.Error())
