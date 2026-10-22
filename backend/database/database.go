@@ -86,7 +86,7 @@ func getConnectionString() string {
 	dbName := os.Getenv("DB_NAME")
 
 	return fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		"%s:%s@tcp(%s:%s)/%s?parseTime=true&multiStatements=true",
 		dbUser,
 		dbPass,
 		dbHost,
