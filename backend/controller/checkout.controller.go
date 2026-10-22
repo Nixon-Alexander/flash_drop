@@ -26,64 +26,55 @@ func InitCheckoutController(
 	}
 }
 
-func (cc *CheckoutController) BuyItems(c *gin.Context) {
-	userIDVal, exists := c.Get("user_id")
-	if !exists {
-		helper.ErrorResponse(c, http.StatusUnauthorized, errors.New("user is not authorized"), "Unauthorized")
-		return
+func mapCheckoutError(err error) (int, string) {
+	switch {
+	case errors.Is(err, types.ErrInvalidItems), errors.Is(err, types.ErrInvalidPaymentType):
+		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, types.ErrProductUnavailable),
+		errors.Is(err, types.ErrInsufficientStock),
+		errors.Is(err, types.ErrFlashSaleUnavailable):
+		return http.StatusConflict, err.Error()
+	case errors.Is(err, types.ErrPaymentGateway):
+		return http.StatusBadGateway, "Payment provider is unavailable, please try again"
+	default:
+		return http.StatusInternalServerError, "Something went wrong"
 	}
-
-	userID, ok := userIDVal.(float64)
-	userIDint := int(userID)
-	if !ok {
-		helper.ErrorResponse(c, http.StatusUnauthorized, errors.New("invalid user ID"), "Unauthorized")
-		return
-	}
-
-	var userInput types.UserInputBuyItemsType
-
-	if err := c.ShouldBindJSON(&userInput); err != nil {
-		cc.log.Error(err.Error())
-		helper.ErrorResponse(c, http.StatusBadRequest, err, "Invalid request body")
-		return
-	}
-
-	if len(userInput.Item) == 0 {
-		cc.log.Error("Item cant be empty")
-		helper.ErrorResponse(c, http.StatusBadRequest, errors.New("items cannot be empty"), "Invalid items")
-		return
-	}
-
-	// var orderID int
-	var res *types.MidtransPaymentResponse
-	var err error
-
-	if userInput.FlashSaleId != nil {
-		if *userInput.FlashSaleId <= 0 {
-			helper.ErrorResponse(c, http.StatusBadRequest, errors.New("invalid flash sale ID"), "Invalid flash sale")
-			return
-		}
-
-		flashSaleInput := types.UserInputFlashSaleCheckoutType{
-			FlashSaleId: *userInput.FlashSaleId,
-			Item:        userInput.Item,
-		}
-
-		res, err = cc.checkoutService.PurchaseFromFlashSale(c, userIDint, flashSaleInput, userInput.UserDetail)
-	} else {
-		originalInput := types.UserOrderType{
-			PaymentType: userInput.PaymentType,
-			Item:        userInput.Item,
-		}
-
-		res, err = cc.checkoutService.PurchaseFromOriginalSale(c, userIDint, originalInput, userInput.UserDetail)
-	}
-
-	if err != nil {
-		cc.log.Error(err.Error())
-		helper.ErrorResponse(c, http.StatusBadRequest, err, "Failed to create order")
-		return
-	}
-
-	helper.SuccessResponse(c, http.StatusCreated, *res, "Order created successfully")
 }
+
+func (cc *CheckoutController) buy(c *gin.Context, requireFlashSale bool) {
+	userID := c.GetInt("user_id")
+	if userID == 0 {
+		helper.ErrorResponse(c, http.StatusUnauthorized, nil, "Unauthorized")
+		return
+	}
+
+	var req types.UserInputBuyItemsType
+	if err := c.ShouldBindJSON(&req); err != nil {
+		helper.ErrorResponse(c, http.StatusBadRequest, nil, "Invalid request body")
+		return
+	}
+	if requireFlashSale && (req.FlashSaleId == nil || *req.FlashSaleId <= 0) {
+		helper.ErrorResponse(c, http.StatusBadRequest, nil, "flash_sale_id is required")
+		return
+	}
+
+	res, err := cc.checkoutService.Checkout(c.Request.Context(), service.CheckoutInput{
+		UserID:      userID,
+		FlashSaleID: req.FlashSaleId,
+		PaymentType: req.PaymentType,
+		Items:       req.Item,
+		Shipping:    req.UserDetail,
+	})
+	if err != nil {
+		status, msg := mapCheckoutError(err)
+		if status == http.StatusInternalServerError {
+			cc.log.Error("checkout failed", zap.Error(err))
+		}
+		helper.ErrorResponse(c, status, nil, msg)
+		return
+	}
+	helper.SuccessResponse(c, http.StatusCreated, res, "Order created successfully")
+}
+
+func (cc *CheckoutController) BuyItems(c *gin.Context)     { cc.buy(c, false) }
+func (cc *CheckoutController) BuyFlashSale(c *gin.Context) { cc.buy(c, true) }

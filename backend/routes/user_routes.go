@@ -16,6 +16,7 @@ type ControllerHandler struct {
 	cart_c      *controller.CartController
 	checkout_c  *controller.CheckoutController
 	flashSale_c *controller.FlashSaleController
+	payment_c   *controller.PaymentController
 }
 
 func InitRoutes(
@@ -26,6 +27,7 @@ func InitRoutes(
 	cart_c *controller.CartController,
 	checkout_c *controller.CheckoutController,
 	flashSale_c *controller.FlashSaleController,
+	payment_c *controller.PaymentController,
 ) *ControllerHandler {
 	return &ControllerHandler{
 		r:           r,
@@ -35,6 +37,7 @@ func InitRoutes(
 		cart_c:      cart_c,
 		checkout_c:  checkout_c,
 		flashSale_c: flashSale_c,
+		payment_c:   payment_c,
 	}
 }
 

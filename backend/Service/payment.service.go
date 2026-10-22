@@ -2,18 +2,18 @@ package service
 
 import (
 	"bytes"
-	"database/sql"
+	"context"
 	"encoding/json"
-	"flash_drop/helper"
+	"errors"
 	"flash_drop/repository"
 	"flash_drop/types"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
-	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
@@ -29,218 +29,152 @@ func InitPaymentService(logger *zap.Logger, repo *repository.PaymentRepository) 
 	}
 }
 
-func (ps *PaymentService) createVANumber() string {
-	min := int64(1000000000)
-	max := int64(10000000000)
+var midtransClient = &http.Client{Timeout: 10 * time.Second}
 
-	randomNum := rand.Int64N(max-min) + min
-	return string(randomNum)
+var enabledChannels = map[types.PaymentMethodType]string{
+	types.GOPAY_EWALLET:     "gopay",
+	types.SHOPEEPAY_EWALLET: "shopeepay",
+	types.PERMATA_VA:        "permata_va",
+	types.BCA_VA:            "bca_va",
+	types.BNI_VA:            "bni_va",
+	types.CIMB_VA:           "cimb_va",
 }
 
-func (ps *PaymentService) bankBCA_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"bca_va": map[string]any{
-			"va_number": vaNumber,
+type snapItem struct {
+	ID       string `json:"id"`
+	Price    int64  `json:"price"`
+	Quantity int    `json:"quantity"`
+	Name     string `json:"name"`
+	Category string `json:"category,omitempty"`
+}
+
+type snapAddress struct {
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	Address     string `json:"address"`
+	City        string `json:"city"`
+	PostalCode  string `json:"postal_code"`
+	CountryCode string `json:"country_code"`
+}
+
+type snapCustomer struct {
+	FirstName       string      `json:"first_name"`
+	LastName        string      `json:"last_name"`
+	Email           string      `json:"email"`
+	Phone           string      `json:"phone"`
+	ShippingAddress snapAddress `json:"shipping_address"`
+}
+
+type snapRequest struct {
+	TransactionDetails struct {
+		OrderID     string `json:"order_id"`
+		GrossAmount int64  `json:"gross_amount"`
+	} `json:"transaction_details"`
+	ItemDetails     []snapItem   `json:"item_details"`
+	CustomerDetails snapCustomer `json:"customer_details"`
+	EnabledPayments []string     `json:"enabled_payments"`
+	Expiry          struct {
+		Unit     string `json:"unit"`
+		Duration int    `json:"duration"`
+	} `json:"expiry"`
+}
+
+func isSupportedPayment(m types.PaymentMethodType) bool {
+	_, ok := enabledChannels[m]
+	return ok
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
+func (ps *PaymentService) CreateTransaction(ctx context.Context, o *types.PendingOrder, method types.PaymentMethodType, ship types.UserInputShippingType) (*types.MidtransPaymentResponse, error) {
+
+	channel, ok := enabledChannels[method]
+	if !ok {
+		return nil, types.ErrInvalidPaymentType
+	}
+
+	items := make([]snapItem, 0, len(o.Lines)+1)
+	var sum int64
+	for _, l := range o.Lines {
+		items = append(items, snapItem{
+			ID:       strconv.Itoa(l.ProductID),
+			Price:    l.UnitPrice,
+			Quantity: l.Quantity,
+			Name:     truncate(l.Name, 50),
+			Category: truncate(l.Category, 50),
+		})
+		sum += l.UnitPrice * int64(l.Quantity)
+	}
+	items = append(items, snapItem{
+		ID:       "SHIPPING",
+		Price:    o.ShippingCost,
+		Quantity: 1,
+		Name:     "Shipping Cost",
+		Category: "Shipping",
+	})
+	sum += o.ShippingCost
+	if sum != o.Total {
+		return nil, fmt.Errorf("item total %d does not match order total %d", sum, o.Total)
+	}
+
+	var req snapRequest
+	req.TransactionDetails.OrderID = o.Number
+	req.TransactionDetails.GrossAmount = o.Total
+	req.ItemDetails = items
+	req.EnabledPayments = []string{channel}
+	req.Expiry.Unit = "minutes"
+	req.Expiry.Duration = midtransExpiryMinutes
+	req.CustomerDetails = snapCustomer{
+		FirstName: ship.FirstName, LastName: ship.LastName, Email: ship.Email, Phone: ship.Phone,
+		ShippingAddress: snapAddress{
+			FirstName: ship.FirstName, LastName: ship.LastName, Email: ship.Email, Phone: ship.Phone,
+			Address: ship.ShippingAddress, City: ship.City, PostalCode: ship.PostalCode, CountryCode: "IDN",
 		},
 	}
-}
 
-func (ps *PaymentService) bankPermata_VA(vaNumber string, recipientName string) map[string]any {
-	return map[string]any{
-		"permata_va": map[string]any{
-			"va_number":      vaNumber,
-			"recipient_name": recipientName,
-		},
-	}
-}
-
-func (ps *PaymentService) bankBNI_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"bni_va": map[string]any{
-			"va_number": vaNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) bankBRI_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"bri_va": map[string]any{
-			"va_number": vaNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) bankCIMB_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"cimb_va": map[string]any{
-			"va_number": vaNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) bankDanamon_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"danamon_va": map[string]any{
-			"va_number": vaNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) bankBSI_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"bsi_va": map[string]any{
-			"va_number": vaNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) bankSeabank_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"seabank_va": map[string]any{
-			"va_number": vaNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) bankSaqu_VA(vaNumber string) map[string]any {
-	return map[string]any{
-		"saqu_va": map[string]any{
-			"va_number": vaNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) gopay(vaNumber string, callbackUrl string, phoneNumber string, countryCode string) map[string]any {
-	return map[string]any{
-		"gopay": map[string]any{
-			"enable_callback":      true,
-			"callback_url":         callbackUrl,
-			"tokenization":         true,
-			"enforce_tokenization": true,
-			"phone_number":         phoneNumber,
-			"country_code":         countryCode,
-		},
-	}
-}
-
-func (ps *PaymentService) shopeePay(callbackUrl string) map[string]any {
-	return map[string]any{
-		"shopeepay": map[string]any{
-			"callback_url": "http://midtrans.com/finish-url?order_id=order-123",
-		},
-	}
-}
-
-func (ps *PaymentService) ovo(phoneNumber string) map[string]any {
-	return map[string]any{
-		"ovo": map[string]any{
-			"payer_phone_number": phoneNumber,
-		},
-	}
-}
-
-func (ps *PaymentService) CreatePayment(ctx *gin.Context, tx *sql.Tx, totalAmount int, userID int, midtransPayload types.MidtransPaymentRequestType) (*types.MidtransPaymentResponse, error) {
-	midtransApi := os.Getenv("MIDTRANS_SNAP_ENDPOINT")
-	midtransServerKey := os.Getenv("MIDTRANS_KEY")
-	base64AuthString := helper.EncodeBase64(midtransServerKey + ":")
-
-	// Inject payment options
-	vaNumber := ps.createVANumber()
-	var paymentOptions map[string]any
-	switch midtransPayload.PaymentType {
-	case types.OVO_EWALLET:
-		fmt.Println("ovo")
-		paymentOptions = ps.ovo(midtransPayload.ShippingAddress.Phone)
-
-	case types.GOPAY_EWALLET:
-		fmt.Println("gopay")
-		paymentOptions = ps.gopay(vaNumber, "https://google.com", midtransPayload.ShippingAddress.Phone, midtransPayload.ShippingAddress.PostalCode)
-
-	case types.SHOPEEPAY_EWALLET:
-		fmt.Println("shopee")
-		paymentOptions = ps.shopeePay("https://google.com")
-
-	case types.PERMATA_VA:
-		fmt.Println("permata")
-		paymentOptions = ps.bankPermata_VA(vaNumber, midtransPayload.ShippingAddress.FirstName)
-
-	case types.BCA_VA:
-		fmt.Println("bca")
-		paymentOptions = ps.bankBCA_VA(vaNumber)
-
-	case types.BNI_VA:
-		fmt.Println("bni")
-		paymentOptions = ps.bankBNI_VA(vaNumber)
-
-	case types.CIMB_VA:
-		fmt.Println("cimb")
-		paymentOptions = ps.bankCIMB_VA(vaNumber)
-
-	case types.DANAMON_VA:
-		fmt.Println("danamon")
-		paymentOptions = ps.bankDanamon_VA(vaNumber)
-
-	case types.BSI_VA:
-		fmt.Println("bsi")
-		paymentOptions = ps.bankBSI_VA(vaNumber)
-
-	case types.SEABANK_VA:
-		fmt.Println("seabank")
-		paymentOptions = ps.bankSeabank_VA(vaNumber)
-
-	case types.SAQU_VA:
-		fmt.Println("saqu")
-		paymentOptions = ps.bankSaqu_VA(vaNumber)
-	}
-
-	midtransPayload.PaymentOptions = paymentOptions
-	// Change Struct into buffer
-	var payload bytes.Buffer
-	err := json.NewEncoder(&payload).Encode(midtransPayload)
+	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", midtransApi, &payload)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, os.Getenv("MIDTRANS_SNAP_ENDPOINT"), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.SetBasicAuth(os.Getenv("MIDTRANS_KEY"), "")
 
-	// Add Header
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", base64AuthString))
-
-	// Do request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := midtransClient.Do(httpReq)
 	if err != nil {
-		return nil, err
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("midtrans request: %w", err)
 	}
 	defer resp.Body.Close()
-	fmt.Println("Midtrans status:", resp.StatusCode)
-	fmt.Println("Midtrans response:", string(body))
 
-	// Read Response
-	var paymentResponse types.MidtransPaymentResponse
-	err = json.Unmarshal([]byte(body), &paymentResponse)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println(paymentResponse)
-	// Create Payment
-	_, err = ps.repo.CreatePayment(ctx, tx, userID, int64(totalAmount), midtransPayload, paymentResponse.Token)
-	if err != nil {
-		return nil, err
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		ps.logger.Error("midtrans non-2xx", zap.Int("status", resp.StatusCode),
+			zap.String("order", o.Number), zap.ByteString("body", raw))
+		return nil, fmt.Errorf("midtrans returned status %d", resp.StatusCode)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	var out types.MidtransPaymentResponse
+	if err := json.Unmarshal(raw, &out); err != nil || out.Token == "" {
+		return nil, errors.New("midtrans returned no token")
 	}
 
-	return &paymentResponse, nil
+	if err := ps.repo.Create(ctx, o.Number, method, o.Total, out.Token); err != nil {
+		return nil, fmt.Errorf("save payment: %w", err)
+	}
+	return &out, nil
 }

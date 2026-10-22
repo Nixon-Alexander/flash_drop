@@ -18,11 +18,6 @@ type CartItemsType struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type UserInputItemType struct {
-	ProductId *int `json:"product_id"`
-	Quantity  *int `json:"quantity"`
-}
-
 type UserInputUpdateCartItemsType struct {
 	CartId int
 	Item   []UserInputItemType `json:"item"`
