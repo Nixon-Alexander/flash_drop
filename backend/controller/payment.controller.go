@@ -44,6 +44,8 @@ func validSignature(n midtransNotification) bool {
 func (pc *PaymentController) Notification(c *gin.Context) {
 	var n midtransNotification
 	if err := c.ShouldBindJSON(&n); err != nil {
+		pc.log.Info("payment notification", zap.String("order", n.OrderID), zap.String("status", n.TransactionStatus))
+		pc.log.Error(err.Error())
 		c.Status(http.StatusBadRequest)
 		return
 	}

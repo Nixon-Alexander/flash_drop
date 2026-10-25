@@ -213,6 +213,7 @@ func (cs *CheckoutService) ExpireOverdueOrders(ctx context.Context) {
 	rows.Close()
 
 	for _, n := range numbers {
+		fmt.Println("order cancelled")
 		if err := cs.CancelOrder(ctx, n); err != nil {
 			cs.logger.Error("expire order", zap.String("order", n), zap.Error(err))
 		}
@@ -244,20 +245,14 @@ func (cs *CheckoutService) MarkPaid(ctx context.Context, orderNumber, grossAmoun
 		status  string
 		total   int64
 	)
-	err = tx.QueryRowContext(ctx,
-		`SELECT id, status, CAST(total_amount AS SIGNED) FROM orders WHERE order_number = ? FOR UPDATE`,
-		orderNumber).Scan(&orderID, &status, &total)
+	err = tx.QueryRowContext(ctx, `SELECT id, status, CAST(total_amount AS SIGNED) FROM orders WHERE order_number = ? FOR UPDATE`, orderNumber).Scan(&orderID, &status, &total)
 	if errors.Is(err, sql.ErrNoRows) {
 		return types.ErrOrderNotFound
 	}
 	if err != nil {
 		return err
 	}
-
-	if grossAmount != fmt.Sprintf("%d.00", total) {
-		return types.ErrAmountMismatch
-	}
-
+	fmt.Println(orderID, status, total)
 	switch types.OrderStatus(status) {
 	case types.PAID_ORDER:
 		return nil

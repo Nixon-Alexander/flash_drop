@@ -53,6 +53,7 @@ func (ch *ControllerHandler) StartRoutes(router *gin.Engine) {
 	v1.POST("/signup", ch.uc.Register)
 	v1.POST("/login", ch.uc.LogIn)
 	v1.POST("/verify_token", ch.uc.VerifyToken)
+	v1.POST("/payment/notification", ch.payment_c.Notification)
 
 	// User Product
 	product := v1.Group("/product")
