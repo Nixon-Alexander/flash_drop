@@ -51,10 +51,32 @@ type UserOrderType struct {
 	Item        []UserInputItemType `json:"item"`
 }
 
-// What user input to payload
+type OrderLine struct {
+	ProductID int
+	Quantity  int
+	Name      string
+	Category  string
+	UnitPrice int64
+}
+
+type PendingOrder struct {
+	Number       string
+	FlashSaleID  *int
+	Lines        []OrderLine
+	Subtotal     int64
+	ShippingCost int64
+	Total        int64
+	ExpiresAt    time.Time
+}
+
+type UserInputItemType struct {
+	ProductId *int `json:"product_id" binding:"required,gt=0"`
+	Quantity  *int `json:"quantity" binding:"required,gt=0,lte=10"`
+}
+
 type UserInputBuyItemsType struct {
 	UserDetail  UserInputShippingType `json:"shipping_detail"`
-	PaymentType PaymentMethodType     `json:"payment_type"`
+	PaymentType PaymentMethodType     `json:"payment_type" binding:"required"`
 	FlashSaleId *int                  `json:"flash_sale_id"`
-	Item        []UserInputItemType   `json:"items"`
+	Item        []UserInputItemType   `json:"items" binding:"required,min=1,max=20,dive"`
 }

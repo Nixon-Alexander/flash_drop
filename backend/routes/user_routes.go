@@ -16,6 +16,7 @@ type ControllerHandler struct {
 	cart_c      *controller.CartController
 	checkout_c  *controller.CheckoutController
 	flashSale_c *controller.FlashSaleController
+	payment_c   *controller.PaymentController
 }
 
 func InitRoutes(
@@ -26,6 +27,7 @@ func InitRoutes(
 	cart_c *controller.CartController,
 	checkout_c *controller.CheckoutController,
 	flashSale_c *controller.FlashSaleController,
+	payment_c *controller.PaymentController,
 ) *ControllerHandler {
 	return &ControllerHandler{
 		r:           r,
@@ -35,6 +37,7 @@ func InitRoutes(
 		cart_c:      cart_c,
 		checkout_c:  checkout_c,
 		flashSale_c: flashSale_c,
+		payment_c:   payment_c,
 	}
 }
 
@@ -50,6 +53,7 @@ func (ch *ControllerHandler) StartRoutes(router *gin.Engine) {
 	v1.POST("/signup", ch.uc.Register)
 	v1.POST("/login", ch.uc.LogIn)
 	v1.POST("/verify_token", ch.uc.VerifyToken)
+	v1.POST("/payment/notification", ch.payment_c.Notification)
 
 	// User Product
 	product := v1.Group("/product")
@@ -70,7 +74,8 @@ func (ch *ControllerHandler) StartRoutes(router *gin.Engine) {
 	// User Flash Sale
 	userFlashSales := v1.Group("/flash_sales")
 	userFlashSales.Use(middleware.AuthMiddleware("customer"))
-	userFlashSales.POST("/checkout", ch.checkout_c.BuyItems)
+	userFlashSales.GET("/", ch.flashSale_c.GetAllEvent)
+	userFlashSales.POST("/checkout", ch.checkout_c.BuyFlashSale)
 
 	// Admin
 	adminRoutes := v1.Group("/admin")

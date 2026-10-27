@@ -2,36 +2,36 @@ package middleware
 
 import (
 	"flash_drop/helper"
+	"flash_drop/types"
+	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
-func AuthMiddleware(types string) gin.HandlerFunc {
+func AuthMiddleware(requiredRole types.UserRole) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("token")
-		err, claim := helper.VerifyToken(token)
-		if err != nil {
-			helper.ErrorResponse(c, 401, err.Error(), "You are not authorized")
-			c.Abort()
-			return
-		}
-
-		claims, ok := claim.(jwt.MapClaims)
+		tokenString, ok := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer ")
 		if !ok {
-			helper.ErrorResponse(c, 401, err, "Something went wrong please try again later")
+			helper.ErrorResponse(c, http.StatusUnauthorized, nil, "Missing or malformed Authorization header")
 			c.Abort()
 			return
 		}
 
-		if claims["role"].(string) != types {
-			helper.ErrorResponse(c, 401, err, "You are not authorized")
+		claims, err := helper.VerifyToken(tokenString)
+		if err != nil {
+			helper.ErrorResponse(c, http.StatusUnauthorized, nil, "Invalid or expired token")
 			c.Abort()
 			return
 		}
 
-		c.Set("user_id", claims["user_id"])
+		if claims.Role != requiredRole {
+			helper.ErrorResponse(c, http.StatusForbidden, nil, "Forbidden")
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
 		c.Next()
-		return
 	}
 }

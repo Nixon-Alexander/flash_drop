@@ -20,7 +20,7 @@ func InitAuthRepository(db *sql.DB) *AuthRepository {
 
 func (ar *AuthRepository) Create(c *gin.Context, userRegisterType types.UserRegisterType) (sql.Result, *types.RepositoryErrorResponseType) {
 	query := "INSERT INTO users (name, email, password_hash, role) VALUES(?, ?, ?, ?);"
-	result, err := ar.db.ExecContext(c, query, userRegisterType.Name, userRegisterType.Email, userRegisterType.Password, userRegisterType.Role)
+	result, err := ar.db.ExecContext(c, query, userRegisterType.Name, userRegisterType.Email, userRegisterType.Password, types.Customer)
 	if err != nil {
 		me, ok := err.(*mysql.MySQLError)
 		if !ok {

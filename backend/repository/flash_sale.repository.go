@@ -28,7 +28,7 @@ func (fr *FlashSaleRepository) CreateEvent(c *gin.Context, event types.UserInput
 
 	res, err := tx.ExecContext(c,
 		`INSERT INTO flash_sales (name, description, start_time, end_time) VALUES (?, ?, ?, ?)`,
-		event.Name, event.Description, event.StartTime, event.EndTime)
+		event.Name, event.Description, event.StartTime.UTC(), event.EndTime.UTC())
 	if err != nil {
 		return err
 	}

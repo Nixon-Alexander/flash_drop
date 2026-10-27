@@ -40,11 +40,11 @@ type FlashSalesItems struct {
 }
 
 type UserInputFlashSalesType struct {
-	Name        string            `json:"name"`
+	Name        string            `json:"name" binding:"required"`
 	Description string            `json:"description"`
-	StartTime   string            `json:"start_time"`
-	EndTime     string            `json:"end_time"`
-	Items       []FlashSalesItems `json:"items"`
+	StartTime   time.Time         `json:"start_time" binding:"required"`
+	EndTime     time.Time         `json:"end_time" binding:"required"`
+	Items       []FlashSalesItems `json:"items" binding:"required,min=1,dive"`
 }
 
 type FlashSaleWithItems struct {

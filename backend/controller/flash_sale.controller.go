@@ -30,6 +30,11 @@ func (fc *FlashSaleController) CreateEvent(c *gin.Context) {
 		return
 	}
 
+	if !userInput.EndTime.After(userInput.StartTime) {
+		helper.ErrorResponse(c, 400, nil, "end_time must be after start_time")
+		return
+	}
+
 	if err := fc.repo.CreateEvent(c, userInput); err != nil {
 		fc.logger.Error("failed to create event", zap.Error(err))
 		helper.ErrorResponse(c, 500, err, "Error when creating event")

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flash_drop/types"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -12,6 +13,15 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type AuthClaims struct {
+	UserID int            `json:"user_id"`
+	Name   string         `json:"name"`
+	Role   types.UserRole `json:"role"`
+	jwt.RegisteredClaims
+}
+
+func jwtSecret() []byte { return []byte(os.Getenv("JWT_SECRET")) }
 
 func getSecretKey() []byte {
 	return []byte("secret_key")
@@ -27,45 +37,36 @@ func VerifyPassword(password, hash string) bool {
 	return err == nil
 }
 
-func CreateToken(username string, userId int, role types.UserRole) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
-		jwt.MapClaims{
-			"name":    username,
-			"user_id": userId,
-			"role":    role,
-			"exp":     time.Now().Add(time.Hour * 24).Unix(),
+func CreateToken(name string, userID int, role types.UserRole) (string, error) {
+	now := time.Now()
+	claims := AuthClaims{
+		UserID: userID,
+		Name:   name,
+		Role:   role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "flash_drop",
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
 		},
-	)
-
-	secretKey := getSecretKey()
-	tokenString, err := token.SignedString(secretKey)
-	if err != nil {
-		return "", err
 	}
-
-	return tokenString, nil
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret())
 }
 
-func VerifyToken(tokenString string) (error, jwt.Claims) {
+func VerifyToken(tokenString string) (*AuthClaims, error) {
 	if tokenString == "" {
-		return errors.New("Token not found"), nil
+		return nil, errors.New("token not found")
 	}
-
-	claims := jwt.MapClaims{}
-	secretKey := getSecretKey()
-	parsedAccessToken, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return secretKey, nil
-	})
-
-	if err != nil {
-		return err, nil
+	claims := &AuthClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims,
+		func(t *jwt.Token) (any, error) { return jwtSecret(), nil },
+		jwt.WithValidMethods([]string{"HS256"}),
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuer("flash_drop"),
+	)
+	if err != nil || !token.Valid {
+		return nil, errors.New("invalid or expired token")
 	}
-
-	if !parsedAccessToken.Valid {
-		return errors.New("Token is invalid"), nil
-	}
-
-	return nil, parsedAccessToken.Claims.(jwt.MapClaims)
+	return claims, nil
 }
 
 func MakeSlug(s string) string {

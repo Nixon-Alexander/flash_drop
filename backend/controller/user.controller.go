@@ -4,6 +4,8 @@ import (
 	"flash_drop/helper"
 	"flash_drop/repository"
 	"flash_drop/types"
+	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -22,49 +24,39 @@ func InitUserController(logger *zap.Logger, repo *repository.AuthRepository) *Us
 }
 
 func (uc *UserController) Register(c *gin.Context) {
-	var userInput types.UserRegisterType
-	err := c.ShouldBind(&userInput)
+	var in types.UserRegisterType
+	if err := c.ShouldBindJSON(&in); err != nil {
+		helper.ErrorResponse(c, http.StatusBadRequest, nil, "Invalid request body")
+		return
+	}
+	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+
+	hash, err := helper.HashPassword(in.Password)
 	if err != nil {
-		uc.logger.Error(err.Error())
-		helper.ErrorResponse(c, 500, nil, err.Error())
+		uc.logger.Error("hash password", zap.Error(err))
+		helper.ErrorResponse(c, http.StatusInternalServerError, nil, "Something went wrong")
 		return
 	}
+	in.Password = hash
 
-	// Hash password
-	hashedPassword, err := helper.HashPassword(userInput.Password)
+	result, repoErr := uc.repo.Create(c, in)
+	if repoErr != nil {
+		helper.ErrorResponse(c, repoErr.HttpCode, nil, repoErr.ErrorMessage)
+		return
+	}
+	userID, _ := result.LastInsertId()
+
+	// Role SELALU customer untuk pendaftaran publik
+	token, err := helper.CreateToken(in.Name, int(userID), types.Customer)
 	if err != nil {
-		uc.logger.Error(err.Error())
-		helper.ErrorResponse(c, 500, nil, err.Error())
-		return
-	}
-	userInput.Password = hashedPassword
-
-	// Insert user
-	result, errRepo := uc.repo.Create(c, userInput)
-	if errRepo != nil {
-		uc.logger.Error(errRepo.ErrorMessage)
-		helper.ErrorResponse(c, errRepo.HttpCode, errRepo, errRepo.ErrorMessage)
-		return
-	}
-	lastInsertId, _ := result.LastInsertId()
-
-	// Generate JWT
-	jwtToken, err := helper.CreateToken(userInput.Name, int(lastInsertId), userInput.Role)
-	if err != nil {
-		uc.logger.Error(err.Error())
-		helper.ErrorResponse(c, 500, nil, err.Error())
+		uc.logger.Error("create token", zap.Error(err))
+		helper.ErrorResponse(c, http.StatusInternalServerError, nil, "Something went wrong")
 		return
 	}
 
-	data := map[string]any{
-		"id":    lastInsertId,
-		"role":  userInput.Role,
-		"email": userInput.Email,
-		"name":  userInput.Name,
-		"token": jwtToken,
-	}
-
-	helper.SuccessResponse(c, 201, data, "User Registered")
+	helper.SuccessResponse(c, http.StatusCreated, map[string]any{
+		"id": userID, "role": types.Customer, "email": in.Email, "name": in.Name, "token": token,
+	}, "User Registered")
 }
 
 func (uc *UserController) LogIn(c *gin.Context) {
@@ -118,7 +110,7 @@ func (uc *UserController) VerifyToken(c *gin.Context) {
 	}
 
 	// Verify JWT Token
-	err, claims := helper.VerifyToken(userInput.Token)
+	claims, err := helper.VerifyToken(userInput.Token)
 	if err != nil {
 		uc.logger.Error(err.Error())
 		helper.ErrorResponse(c, 401, nil, err.Error())
