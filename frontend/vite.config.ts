@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
         "/api": { target, changeOrigin: true },
         "/uploads": { target, changeOrigin: true },
       },
+      host: true
     },
   };
 });
