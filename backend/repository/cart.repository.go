@@ -24,13 +24,11 @@ func internalErr(err error) *types.RepositoryErrorResponseType {
 
 func (cr *CartRepository) GetItems(c *gin.Context, userId int) (*sql.Rows, error) {
 	query := `
-		SELECT ci.id AS cart_items_id, ci.cart_id, ci.product_id, ci.quantity, cat.name AS category_name, p.name, p.slug, p.price, p.image_url FROM carts c
-		JOIN cart_items ci
-		ON cart_id = c.id
-		JOIN products p
-		ON p.id = ci.product_id
-		JOIN categories cat
-		ON cat.id = p.category_id
+		SELECT ci.id AS cart_items_id, ci.cart_id, ci.product_id, ci.quantity, cat.name AS category_name, p.name, p.slug, CAST(p.price AS SIGNED) AS price, p.image_url
+		FROM carts c
+		JOIN cart_items ci ON ci.cart_id = c.id
+		JOIN products p ON p.id = ci.product_id
+		JOIN categories cat ON cat.id = p.category_id
 		WHERE c.user_id = ?;
 	`
 

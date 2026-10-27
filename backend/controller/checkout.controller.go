@@ -5,6 +5,7 @@ import (
 	service "flash_drop/Service"
 	"flash_drop/helper"
 	"flash_drop/types"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -57,6 +58,7 @@ func (cc *CheckoutController) buy(c *gin.Context, requireFlashSale bool) {
 		helper.ErrorResponse(c, http.StatusBadRequest, nil, "flash_sale_id is required")
 		return
 	}
+	fmt.Println(req)
 
 	res, err := cc.checkoutService.Checkout(c.Request.Context(), service.CheckoutInput{
 		UserID:      userID,
@@ -67,6 +69,7 @@ func (cc *CheckoutController) buy(c *gin.Context, requireFlashSale bool) {
 	})
 	if err != nil {
 		status, msg := mapCheckoutError(err)
+		fmt.Println(msg)
 		if status == http.StatusInternalServerError {
 			cc.log.Error("checkout failed", zap.Error(err))
 		}

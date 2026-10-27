@@ -7,6 +7,7 @@ import (
 	"flash_drop/controller"
 	"flash_drop/database"
 	"flash_drop/helper"
+	"flash_drop/middleware"
 	"flash_drop/repository"
 	"flash_drop/routes"
 	"fmt"
@@ -81,6 +82,8 @@ func main() {
 	router := gin.Default()
 	router.MaxMultipartMemory = 8 << 20
 	_ = router.SetTrustedProxies(nil)
+	router.Static("/uploads", "./uploads")
+	router.Use(middleware.CorsMiddleware())
 
 	// Start Serve
 	routeHandler := routes.InitRoutes(router, productController, userController, categoryController, cartController, checkoutController, flashSaleController, paymentController)

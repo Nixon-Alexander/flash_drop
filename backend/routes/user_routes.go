@@ -74,7 +74,8 @@ func (ch *ControllerHandler) StartRoutes(router *gin.Engine) {
 	// User Flash Sale
 	userFlashSales := v1.Group("/flash_sales")
 	userFlashSales.Use(middleware.AuthMiddleware("customer"))
-	userFlashSales.POST("/checkout", ch.checkout_c.BuyItems)
+	userFlashSales.GET("/", ch.flashSale_c.GetAllEvent)
+	userFlashSales.POST("/checkout", ch.checkout_c.BuyFlashSale)
 
 	// Admin
 	adminRoutes := v1.Group("/admin")

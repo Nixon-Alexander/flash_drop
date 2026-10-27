@@ -77,17 +77,19 @@ func (r *OrderRepository) DecreaseStock(ctx context.Context, tx *sql.Tx, product
 
 func (r *OrderRepository) ReserveFlashItem(ctx context.Context, tx *sql.Tx, flashSaleID, productID, qty int) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
-		UPDATE flash_sale_items fsi
-		JOIN flash_sales fs ON fs.id = fsi.flash_sale_id
-		SET fsi.sold_quantity = fsi.sold_quantity + ?
-		WHERE fsi.flash_sale_id = ? AND fsi.product_id = ?
-		  AND fsi.stock - fsi.sold_quantity >= ?
-		  AND fs.status = 'active'
-		  AND NOW() >= fs.start_time AND NOW() < fs.end_time`,
+	UPDATE flash_sale_items fsi
+	JOIN flash_sales fs ON fs.id = fsi.flash_sale_id
+	SET fsi.sold_quantity = fsi.sold_quantity + ?
+	WHERE fsi.flash_sale_id = ? AND fsi.product_id = ?
+	AND fsi.stock - fsi.sold_quantity >= ?
+	AND fs.status = 'active'
+	AND NOW() >= fs.start_time AND NOW() < fs.end_time`,
 		qty, flashSaleID, productID, qty)
+	fmt.Println(qty, flashSaleID, productID, qty)
 	if err != nil {
 		return 0, err
 	}
+	fmt.Println(res.RowsAffected())
 	if n, _ := res.RowsAffected(); n != 1 {
 		return 0, types.ErrFlashSaleUnavailable
 	}
@@ -100,6 +102,8 @@ func (r *OrderRepository) ReserveFlashItem(ctx context.Context, tx *sql.Tx, flas
 }
 
 func (r *OrderRepository) CreateOrder(ctx context.Context, tx *sql.Tx, userID int, o *types.PendingOrder, ship types.UserInputShippingType) error {
+	fmt.Println("Expires at: ", o.ExpiresAt)
+
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO orders (user_id, flash_sale_id, order_number, subtotal, shipping_cost, total_amount,
 			status, expires_at, shipping_name, shipping_phone, shipping_address)

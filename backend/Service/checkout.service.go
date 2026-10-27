@@ -113,7 +113,7 @@ func (cs *CheckoutService) createPendingOrder(ctx context.Context, in CheckoutIn
 		Subtotal:     subtotal,
 		ShippingCost: shipping,
 		Total:        subtotal + shipping,
-		ExpiresAt:    time.Now().UTC().Add(midtransExpiryMinutes*time.Minute + expiryGrace),
+		ExpiresAt:    time.Now().Add(midtransExpiryMinutes*time.Minute + expiryGrace),
 	}
 	if err := cs.orderRepo.CreateOrder(ctx, tx, in.UserID, order, in.Shipping); err != nil {
 		return nil, err
