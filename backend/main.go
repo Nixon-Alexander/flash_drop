@@ -29,7 +29,7 @@ func main() {
 	defer logger.Sync()
 
 	// Load .env
-	err := godotenv.Load("local.env")
+	err := godotenv.Load()
 	if err != nil {
 		logger.Error(err.Error())
 		return
