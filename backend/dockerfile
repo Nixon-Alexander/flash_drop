@@ -13,7 +13,7 @@ FROM alpine:latest
 
 WORKDIR /app
 COPY --from=builder /app/app .
-COPY --from=builder /database/migrations ./database/migrations
+COPY --from=builder /app/database/migrations ./database/migrations
 
 EXPOSE 8001
 
