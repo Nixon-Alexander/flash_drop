@@ -15,7 +15,7 @@ import (
 
 func InitDatabase() (*sql.DB, error) {
 	connString := getConnectionString()
-
+	fmt.Println("Conn string: ", connString)
 	db, err := sql.Open("mysql", connString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
