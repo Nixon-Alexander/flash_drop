@@ -20,6 +20,6 @@ services:
       context: ./frontend
       dockerfile: dockerfile
     ports:
-      - "5173:5173"
+      - "5173:80"
     env_file:
       - ./frontend/.env
