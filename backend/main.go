@@ -61,6 +61,7 @@ func main() {
 	orderRepo := repository.InitOrderRepository(db)
 	paymentRepo := repository.InitPaymentRepository(db)
 
+	outboxService := *service.InitOutboxService(db, logger)
 	paymentService := service.InitPaymentService(logger, paymentRepo)
 	checkoutService := service.InitCheckoutService(db, logger, orderRepo, paymentService)
 	checkoutController := controller.InitCheckoutController(logger, checkoutService)
@@ -73,10 +74,15 @@ func main() {
 	defer stop()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		checkoutService.StartExpiryWorker(ctx, time.Minute)
+	}()
+
+	go func() {
+		defer wg.Done()
+		outboxService.Run(ctx)
 	}()
 
 	router := gin.Default()
