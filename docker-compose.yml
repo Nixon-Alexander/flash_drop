@@ -42,6 +42,7 @@ services:
     image: grafana/alloy:latest
     volumes:
       - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
     ports:
       - "12345:12345"
