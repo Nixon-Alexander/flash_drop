@@ -241,18 +241,19 @@ func (cs *CheckoutService) MarkPaid(ctx context.Context, orderNumber, grossAmoun
 	defer tx.Rollback()
 
 	var (
-		orderID int64
-		status  string
-		total   int64
+		orderID      int64
+		status       string
+		total        int64
+		emailAddress string
 	)
-	err = tx.QueryRowContext(ctx, `SELECT id, status, CAST(total_amount AS SIGNED) FROM orders WHERE order_number = ? FOR UPDATE`, orderNumber).Scan(&orderID, &status, &total)
+	err = tx.QueryRowContext(ctx, `SELECT orders.id, orders.status, CAST(orders.total_amount AS SIGNED), users.email FROM orders JOIN users ON orders.user_id =  users.id WHERE order_number = ? FOR UPDATE`, orderNumber).Scan(&orderID, &status, &total, &emailAddress)
 	if errors.Is(err, sql.ErrNoRows) {
 		return types.ErrOrderNotFound
 	}
 	if err != nil {
 		return err
 	}
-	fmt.Println(orderID, status, total)
+
 	switch types.OrderStatus(status) {
 	case types.PAID_ORDER:
 		return nil
@@ -265,6 +266,14 @@ func (cs *CheckoutService) MarkPaid(ctx context.Context, orderNumber, grossAmoun
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE payments SET status = 'paid', paid_at = NOW() WHERE order_id = ?`, orderNumber); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO outbox_events (event_type, aggregate_id, payload)
+		VALUES ('order.paid', ?, JSON_OBJECT('order_number', ?, 'total', ?, 'email', ?))
+		ON DUPLICATE KEY UPDATE id = id`,
+		orderNumber, orderNumber, total, emailAddress); err != nil {
 		return err
 	}
 	return tx.Commit()
