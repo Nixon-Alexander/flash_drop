@@ -28,18 +28,14 @@ discovery.relabel "flash_drop" {
 
   // Compose service
   rule {
-    source_labels = [
-      "__meta_docker_container_label_com_docker_compose_service"
-    ]
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
 
     target_label = "service"
   }
 
   // Compose project
   rule {
-    source_labels = [
-      "__meta_docker_container_label_com_docker_compose_project"
-    ]
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
 
     target_label = "project"
   }
@@ -75,8 +71,8 @@ loki.process "flash_drop" {
 
   stage.static_labels {
     values = {
-      application = "flash_drop"
-      environment = "production"
+      application = "flash_drop",
+      environment = "production",
     }
   }
 
