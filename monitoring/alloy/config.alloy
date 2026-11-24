@@ -1,0 +1,97 @@
+// ============================================================
+// Discover FlashDrop backend & frontend containers
+// ============================================================
+
+discovery.docker "flash_drop" {
+  host = "unix:///var/run/docker.sock"
+
+  filter {
+    name   = "label"
+    values = ["logging=loki"]
+  }
+}
+
+
+// ============================================================
+// Relabel Docker metadata
+// ============================================================
+
+discovery.relabel "flash_drop" {
+  targets = discovery.docker.flash_drop.targets
+
+  // Container name
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Compose service
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_com_docker_compose_service"
+    ]
+
+    target_label = "service"
+  }
+
+  // Compose project
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_com_docker_compose_project"
+    ]
+
+    target_label = "project"
+  }
+
+  // Docker image
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label = "image"
+  }
+}
+
+
+// ============================================================
+// Read Docker logs
+// ============================================================
+
+loki.source.docker "flash_drop" {
+  host = "unix:///var/run/docker.sock"
+
+  targets = discovery.relabel.flash_drop.output
+
+  forward_to = [
+    loki.process.flash_drop.receiver,
+  ]
+}
+
+
+// ============================================================
+// Process logs
+// ============================================================
+
+loki.process "flash_drop" {
+
+  stage.static_labels {
+    values = {
+      application = "flash_drop"
+      environment = "production"
+    }
+  }
+
+  forward_to = [
+    loki.write.local.receiver,
+  ]
+}
+
+
+// ============================================================
+// Send logs to Loki
+// ============================================================
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
